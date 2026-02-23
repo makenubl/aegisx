@@ -327,9 +327,17 @@ class AegisXAPI {
     );
   }
 
-  /** True when the error is a network failure with no HTTP response (backend unreachable). */
-  private isOffline(err: unknown): boolean {
-    return axios.isAxiosError(err) && !err.response;
+  /**
+   * True when the backend is unavailable — covers:
+   *  - Network errors (no HTTP response at all)
+   *  - 403/404 from S3/CloudFront when no backend origin is configured
+   *  - 5xx server errors
+   */
+  private isUnavailable(err: unknown): boolean {
+    if (!axios.isAxiosError(err)) return false;
+    if (!err.response) return true;
+    const s = err.response.status;
+    return s === 403 || s === 404 || s >= 500;
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────
@@ -342,7 +350,7 @@ class AegisXAPI {
       localStorage.setItem("aegisx_token", data.token);
       return data;
     } catch (err) {
-      if (this.isOffline(err)) {
+      if (this.isUnavailable(err)) {
         // Backend unreachable — activate demo mode automatically
         localStorage.setItem("aegisx_token", DEMO_TOKEN);
         return MOCK.login;
@@ -366,7 +374,7 @@ class AegisXAPI {
       const { data } = await this.client.get("/policies", { params: { kind } });
       return data;
     } catch (err) {
-      if (this.isOffline(err)) {
+      if (this.isUnavailable(err)) {
         const items = kind ? MOCK.policies.filter((p) => p.kind === kind) : MOCK.policies;
         return { items, count: items.length };
       }
@@ -429,7 +437,7 @@ class AegisXAPI {
       const { data } = await this.client.get("/firewall/status");
       return data;
     } catch (err) {
-      if (this.isOffline(err)) return MOCK.firewallStatus;
+      if (this.isUnavailable(err)) return MOCK.firewallStatus;
       throw err;
     }
   }
@@ -440,7 +448,7 @@ class AegisXAPI {
       const { data } = await this.client.get("/firewall/rules");
       return data;
     } catch (err) {
-      if (this.isOffline(err)) return { items: MOCK.firewallRules, count: MOCK.firewallRules.length };
+      if (this.isUnavailable(err)) return { items: MOCK.firewallRules, count: MOCK.firewallRules.length };
       throw err;
     }
   }
@@ -470,7 +478,7 @@ class AegisXAPI {
       const { data } = await this.client.get("/status");
       return data;
     } catch (err) {
-      if (this.isOffline(err)) return MOCK.systemStatus;
+      if (this.isUnavailable(err)) return MOCK.systemStatus;
       throw err;
     }
   }

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Shield, Eye, EyeOff, Loader2, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+
+const DEMO_TOKEN = "aegisx-demo-v1";
 
 export default function LoginPage() {
   const router   = useRouter();
@@ -108,6 +110,23 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <div className="mt-4 pt-4 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem("aegisx_token", DEMO_TOKEN);
+                router.push("/dashboard");
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md
+                         text-xs font-medium text-slate-400 hover:text-sky-400
+                         bg-slate-800/50 hover:bg-sky-950/40 border border-slate-700
+                         hover:border-sky-800/50 transition-all"
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              Try Demo — no backend required
+            </button>
+          </div>
         </div>
 
         <p className="text-center text-[11px] text-slate-700 mt-5">
