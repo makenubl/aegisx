@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegisx
+  labels:
+    app.kubernetes.io/name: aegisx
+    app.kubernetes.io/component: namespace

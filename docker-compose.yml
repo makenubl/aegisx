@@ -1,0 +1,155 @@
+version: "3.9"
+
+# ─── AegisX Docker Compose — single-node deployment ─────────────────────────
+# Usage:
+#   cp .env.example .env && docker compose up -d
+
+name: aegisx
+
+networks:
+  mgmt:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  aegisx_rollback:
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [mgmt]
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-aegisx}
+      POSTGRES_USER:     ${POSTGRES_USER:-aegisx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./internal/store/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegisx}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── AegisX API server ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    networks: [mgmt]
+    environment:
+      AEGISX_DATABASE_DSN:         postgres://${POSTGRES_USER:-aegisx}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-aegisx}?sslmode=disable
+      AEGISX_AUTH_JWT_SECRET:      ${JWT_SECRET:-please-change-this-secret}
+      AEGISX_AUTH_ADMIN_USER:      ${ADMIN_USER:-admin}
+      AEGISX_AUTH_ADMIN_PASSWORD:  ${ADMIN_PASSWORD:-changeme}
+      AEGISX_FIREWALL_DRY_RUN:     ${FIREWALL_DRY_RUN:-true}
+      AEGISX_LOG_LEVEL:            ${LOG_LEVEL:-info}
+      AEGISX_LOG_FORMAT:           json
+    ports:
+      - "8080:8080"   # REST API
+      - "9090:9090"   # gRPC
+      - "9100:9100"   # Prometheus metrics
+    volumes:
+      - aegisx_rollback:/var/lib/aegisx/rollback
+      - ./configs:/etc/aegisx:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Web UI ─────────────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks: [mgmt]
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  # ── Prometheus ────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    networks: [mgmt]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    networks: [mgmt]
+    environment:
+      GF_SECURITY_ADMIN_USER:     ${ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      GF_SERVER_ROOT_URL:         http://localhost:3001
+      GF_INSTALL_PLUGINS:         grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+  # ── Suricata (IDS/IPS) ─────────────────────────────────────────────────────
+  suricata:
+    image: jasonish/suricata:7.0.5
+    restart: unless-stopped
+    network_mode: host           # needs raw socket access
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    command: >
+      suricata -c /etc/suricata/suricata.yaml
+               --pidfile /var/run/suricata.pid
+               -i ${WAN_INTERFACE:-eth0}
+    volumes:
+      - ./configs/suricata:/etc/suricata:ro
+      - /var/log/suricata:/var/log/suricata
+      - /var/run/suricata:/var/run/suricata
+    profiles: [ids]    # opt-in: docker compose --profile ids up
+
+  # ── HAProxy (Load Balancer) ────────────────────────────────────────────────
+  haproxy:
+    image: haproxy:2.9-alpine
+    restart: unless-stopped
+    networks: [mgmt]
+    volumes:
+      - ./configs/haproxy:/usr/local/etc/haproxy:ro
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"   # stats
+    profiles: [lb]     # opt-in: docker compose --profile lb up

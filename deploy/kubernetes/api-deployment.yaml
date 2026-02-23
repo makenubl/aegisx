@@ -1,0 +1,135 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegisx-api
+  namespace: aegisx
+  labels:
+    app: aegisx-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aegisx-api
+  template:
+    metadata:
+      labels:
+        app: aegisx-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: aegisx-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: aegisx/api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9090
+            - name: metrics
+              containerPort: 9100
+          env:
+            - name: AEGISX_DATABASE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: aegisx-secrets
+                  key: database-dsn
+            - name: AEGISX_AUTH_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aegisx-secrets
+                  key: jwt-secret
+            - name: AEGISX_AUTH_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aegisx-secrets
+                  key: admin-password
+            - name: AEGISX_FIREWALL_DRY_RUN
+              value: "true"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegisx-api
+  namespace: aegisx
+spec:
+  selector:
+    app: aegisx-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aegisx-api
+  namespace: aegisx
+
+---
+# HorizontalPodAutoscaler for control plane
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegisx-api
+  namespace: aegisx
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegisx-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

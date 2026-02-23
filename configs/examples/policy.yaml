@@ -1,0 +1,180 @@
+# AegisX Example Policies
+# Apply with: aegisx-cli policy apply -f policy.yaml
+# Or via UI: Policies → New Policy → paste YAML
+
+---
+# ── Firewall Policy: Web Server DMZ ──────────────────────────────────────────
+apiVersion: aegisx.io/v1
+kind: FirewallPolicy
+metadata:
+  name: web-dmz
+  namespace: production
+  labels:
+    tier: web
+    env: production
+spec:
+  defaultAction: DROP
+  rules:
+    # Allow inbound HTTP/HTTPS from anywhere
+    - name: allow-http
+      priority: 100
+      action: ALLOW
+      protocol: tcp
+      source:
+        addresses: ["0.0.0.0/0"]
+      destination:
+        addresses: ["10.0.1.0/24"]
+        ports: [80, 443]
+      state: [new, established]
+      log: true
+      comment: "Allow web traffic to DMZ"
+
+    # Allow established connections back out
+    - name: allow-established
+      priority: 200
+      action: ALLOW
+      state: [established, related]
+      comment: "Allow established/related"
+
+    # Rate-limit SSH to prevent brute force
+    - name: rate-limit-ssh
+      priority: 300
+      action: ALLOW
+      protocol: tcp
+      source:
+        addresses: ["10.0.0.0/8"]   # management network only
+      destination:
+        ports: [22]
+      rateLimit:
+        rate: "3/minute"
+        burst: 5
+      log: true
+      comment: "Rate-limited SSH from management"
+
+    # Block known bad actors
+    - name: block-bogons
+      priority: 50
+      action: DROP
+      source:
+        addresses:
+          - "0.0.0.0/8"
+          - "10.0.0.0/8"       # comment out if RFC1918 is valid src
+          - "127.0.0.0/8"
+          - "169.254.0.0/16"
+          - "192.0.2.0/24"
+          - "198.51.100.0/24"
+          - "203.0.113.0/24"
+      comment: "Block bogon addresses"
+
+    # Catch-all deny with logging
+    - name: deny-all-log
+      priority: 9999
+      action: DROP
+      log: true
+      comment: "Default deny with log"
+
+---
+# ── NAT Policy: Internet Masquerade ──────────────────────────────────────────
+apiVersion: aegisx.io/v1
+kind: NATPolicy
+metadata:
+  name: internet-nat
+  namespace: production
+spec:
+  rules:
+    - name: masquerade-lan
+      type: MASQUERADE
+      source: "10.0.0.0/8"
+      outInterface: eth0   # WAN interface
+
+    - name: dnat-web
+      type: DNAT
+      destination: "203.0.113.1"  # public IP
+      toDest: "10.0.1.10:80"     # internal web server
+
+---
+# ── Load Balancer Policy: Web Tier ───────────────────────────────────────────
+apiVersion: aegisx.io/v1
+kind: LoadBalancerPolicy
+metadata:
+  name: web-lb
+  namespace: production
+spec:
+  frontend:
+    bind: "0.0.0.0:80"
+    mode: http
+    maxConn: 50000
+  backend:
+    algorithm: leastconn
+    servers:
+      - name: web1
+        address: "10.0.1.10:8080"
+        weight: 1
+      - name: web2
+        address: "10.0.1.11:8080"
+        weight: 1
+      - name: web3
+        address: "10.0.1.12:8080"
+        weight: 1
+        backup: false
+    healthCheck:
+      interval: "5s"
+      timeout: "3s"
+      path: "/healthz"
+      rise: 2
+      fall: 3
+  tls:
+    cert: /etc/aegisx/certs/server.crt
+    key:  /etc/aegisx/certs/server.key
+    minVersion: TLSv1.3
+
+---
+# ── VPN Policy: Branch Office ─────────────────────────────────────────────────
+apiVersion: aegisx.io/v1
+kind: VPNPolicy
+metadata:
+  name: branch-vpn
+  namespace: production
+spec:
+  interface: wg0
+  listenPort: 51820
+  address: "10.200.0.1/24"
+  dns:
+    - "10.0.0.53"
+    - "10.0.0.54"
+  peers:
+    - name: branch-office-nyc
+      publicKey: "REPLACE_WITH_REAL_WG_PUBLIC_KEY=="
+      allowedIPs:
+        - "10.200.0.2/32"
+        - "192.168.10.0/24"   # branch LAN
+      endpoint: "203.0.113.100:51820"
+      keepAlive: 25
+
+    - name: remote-admin
+      publicKey: "REPLACE_WITH_REAL_WG_PUBLIC_KEY_2=="
+      allowedIPs:
+        - "10.200.0.10/32"
+      keepAlive: 25
+
+---
+# ── IDS Policy: Custom Suricata Rules ─────────────────────────────────────────
+apiVersion: aegisx.io/v1
+kind: IDSPolicy
+metadata:
+  name: custom-ids
+  namespace: production
+spec:
+  mode: ips
+  ruleSets:
+    - emerging-threats
+    - suricata-main
+  customRules:
+    - id: local-1000001
+      message: "AegisX: Block outbound to known C2"
+      enabled: true
+      rule: >
+        drop tcp $HOME_NET any -> $EXTERNAL_NET [4444,8080,8443]
+        (msg:"AegisX Block potential C2 egress";
+        threshold: type limit, track by_src, count 1, seconds 60;
+        classtype:trojan-activity; sid:1000001; rev:1;)

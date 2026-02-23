@@ -1,0 +1,41 @@
+# ─── Build stage ─────────────────────────────────────────────────────────────
+FROM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+    -o /aegisx-api ./cmd/aegisx-api
+
+# ─── Runtime stage ────────────────────────────────────────────────────────────
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata nftables
+
+# Non-root user
+RUN addgroup -S aegisx && adduser -S aegisx -G aegisx
+
+WORKDIR /app
+
+COPY --from=builder /aegisx-api .
+COPY --from=builder /app/internal/store/migrations ./internal/store/migrations
+
+# Directories
+RUN mkdir -p /etc/aegisx /var/lib/aegisx/rollback && \
+    chown -R aegisx:aegisx /var/lib/aegisx
+
+# NOTE: The API server itself runs as non-root.
+# The agent (aegisx-agent) runs as root for nftables access.
+USER aegisx
+
+EXPOSE 8080 9090 9100
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:8080/healthz || exit 1
+
+ENTRYPOINT ["/app/aegisx-api"]

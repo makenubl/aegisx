@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-slate-800;
+  }
+
+  :root {
+    --surface:        #090e1a;
+    --surface-card:   #111827;
+    --surface-border: #1e293b;
+    --surface-hover:  #1a2333;
+  }
+
+  html, body {
+    background-color: var(--surface);
+    color: #cbd5e1;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { background: #1e293b; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #334155; }
+}
+
+@layer components {
+
+  /* ── Cards ──────────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-[#111827] border border-slate-800 rounded-lg;
+  }
+
+  .card-hover {
+    @apply card hover:border-slate-700 transition-colors;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-sky-600 hover:bg-sky-500 active:bg-sky-700
+           text-white text-sm font-medium
+           px-3.5 py-2 rounded-md
+           transition-colors
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-slate-800 hover:bg-slate-700 active:bg-slate-900
+           text-slate-300 hover:text-slate-100 text-sm font-medium
+           px-3.5 py-2 rounded-md border border-slate-700
+           transition-colors
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-red-900/40 hover:bg-red-800/60 active:bg-red-900
+           text-red-400 hover:text-red-300 text-sm font-medium
+           px-3.5 py-2 rounded-md border border-red-800/50
+           transition-colors
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           text-slate-500 hover:text-slate-300 hover:bg-slate-800
+           text-sm font-medium px-2.5 py-1.5 rounded-md
+           transition-colors;
+  }
+
+  /* ── Inputs ─────────────────────────────────────────────────────────── */
+  .input {
+    @apply bg-[#090e1a] border border-slate-700 rounded-md px-3 py-2 text-sm
+           text-slate-200 placeholder-slate-600
+           focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500/50
+           transition-all w-full;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+
+  .badge-green  { @apply bg-emerald-950/80 text-emerald-400 border border-emerald-800/60; }
+  .badge-red    { @apply bg-red-950/80     text-red-400     border border-red-800/60;    }
+  .badge-yellow { @apply bg-amber-950/80   text-amber-400   border border-amber-800/60;  }
+  .badge-blue   { @apply bg-sky-950/80     text-sky-400     border border-sky-800/60;    }
+  .badge-gray   { @apply bg-slate-800      text-slate-400   border border-slate-700;     }
+  .badge-purple { @apply bg-purple-950/80  text-purple-400  border border-purple-800/60; }
+
+  /* ── Tables ─────────────────────────────────────────────────────────── */
+  .table-header {
+    @apply px-4 py-2.5 text-left text-[11px] font-semibold text-slate-500
+           uppercase tracking-wider whitespace-nowrap;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-slate-300;
+  }
+
+  .table-row {
+    @apply border-b border-slate-800 hover:bg-slate-800/30 transition-colors;
+  }
+}
+
+/* Monaco Editor dark theme integration */
+.monaco-editor-container {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #1e293b;
+}

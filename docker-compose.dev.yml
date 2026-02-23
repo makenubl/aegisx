@@ -1,0 +1,40 @@
+version: "3.9"
+# AegisX dev override — infrastructure only (no Go build required)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# This starts: Postgres + Prometheus + Grafana
+# Run API locally: go run ./cmd/aegisx-api
+# Run UI locally:  cd ui && npm run dev
+
+name: aegisx-dev
+
+services:
+  # Disable services that need a compiled binary
+  api:
+    profiles: [app]   # opt-in only
+  ui:
+    profiles: [app]   # opt-in only
+
+  # Postgres with immediate init
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB:       aegisx
+      POSTGRES_USER:     aegisx
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  prometheus:
+    ports:
+      - "9091:9090"
+
+  grafana:
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED:  "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
