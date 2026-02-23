@@ -5,17 +5,27 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Shield, LayoutDashboard, FileText, AlertTriangle,
   Network, Layers, Key, Settings, Activity, LogOut,
+  Bug, Globe, Fingerprint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
 // ─── Nav config ───────────────────────────────────────────────────────────
 
-const coreNav = [
+const monitorNav = [
   { href: "/dashboard", label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/firewall",  label: "Firewall",   icon: Shield },
-  { href: "/policies",  label: "Policies",   icon: FileText },
   { href: "/alerts",    label: "Alerts",     icon: AlertTriangle, badge: "5" },
+];
+
+const securityNav = [
+  { href: "/firewall",  label: "Firewall",          icon: Shield    },
+  { href: "/policies",  label: "Policies",          icon: FileText  },
+  { href: "/threats",   label: "Threat Prevention", icon: Bug       },
+];
+
+const intelligenceNav = [
+  { href: "/app-intel", label: "App Intelligence",  icon: Globe       },
+  { href: "/identity",  label: "Identity & Access", icon: Fingerprint },
 ];
 
 const networkNav = [
@@ -87,7 +97,10 @@ function NavItem({
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router  = useRouter();
+  const router   = useRouter();
+
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   return (
     <aside className="flex flex-col w-60 bg-[#0d1117] border-r border-slate-800/80 h-screen fixed left-0 top-0 z-30">
@@ -110,13 +123,20 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-0.5">
+
         <SectionLabel label="Monitor" />
-        {coreNav.map((item) => (
-          <NavItem
-            key={item.href}
-            {...item}
-            active={pathname === item.href || pathname.startsWith(item.href + "/")}
-          />
+        {monitorNav.map((item) => (
+          <NavItem key={item.href} {...item} active={isActive(item.href)} />
+        ))}
+
+        <SectionLabel label="Security" />
+        {securityNav.map((item) => (
+          <NavItem key={item.href} {...item} active={isActive(item.href)} />
+        ))}
+
+        <SectionLabel label="Intelligence" />
+        {intelligenceNav.map((item) => (
+          <NavItem key={item.href} {...item} active={isActive(item.href)} />
         ))}
 
         <SectionLabel label="Network" />
@@ -124,6 +144,7 @@ export function Sidebar() {
 
         <SectionLabel label="Observability" />
         {observabilityNav.map((item) => <NavItem key={item.href} {...item} />)}
+
       </nav>
 
       {/* Bottom */}
